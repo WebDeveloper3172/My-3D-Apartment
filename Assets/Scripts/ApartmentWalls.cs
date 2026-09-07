@@ -5,6 +5,8 @@ using UnityEngine;
 public sealed class ApartmentWalls : MonoBehaviour
 {
     [SerializeField, Min(0.01f)] private float wallThickness = 0.10f;
+    [SerializeField, Min(0.01f)] private float floorThickness = 0.10f;
+    [SerializeField] private Transform floor;
     [SerializeField] private float entranceX = -2.55f;
     [SerializeField] private float roomLength = 8.30f;
     [SerializeField] private float roomWidth = 2.77f;
@@ -47,7 +49,7 @@ public sealed class ApartmentWalls : MonoBehaviour
     [ContextMenu("Apply Wall Dimensions")]
     public void ApplyLayout()
     {
-        if (wallThickness <= 0f || roomLength <= 0f || roomWidth <= 0f || roomHeight <= 0f ||
+        if (floorThickness <= 0f || wallThickness <= 0f || roomLength <= 0f || roomWidth <= 0f || roomHeight <= 0f ||
             doorLeftOffset <= 0f || doorWidth <= 0f || doorHeight <= 0f ||
             doorLeftOffset + doorWidth >= roomWidth || doorHeight >= roomHeight ||
             windowWidth <= 0f || windowWidth >= roomWidth || windowHeight <= 0f ||
@@ -56,6 +58,10 @@ public sealed class ApartmentWalls : MonoBehaviour
             Debug.LogWarning("Wall dimensions must leave positive sections around the openings.", this);
             return;
         }
+
+        // The top of the floor is exactly at Y = 0.
+        Set(floor, entranceX + roomLength / 2f, -floorThickness / 2f, 0f,
+            roomLength, floorThickness, roomWidth);
 
         // Looking toward the entrance from inside (-X), left is -Z.
         float zMin = -roomWidth / 2f;
