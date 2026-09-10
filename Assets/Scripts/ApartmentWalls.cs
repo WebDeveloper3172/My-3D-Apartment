@@ -18,6 +18,14 @@ public sealed class ApartmentWalls : MonoBehaviour
     [SerializeField] private float windowHeight = 2.27f;
     [SerializeField] private float windowSill = 0.90f;
 
+    [Header("Bathroom under the upper deck (meters)")]
+    [SerializeField] private bool addBathroom = true;
+    [SerializeField, Min(0.01f)] private float bathroomWidth = 1.54f;
+    [SerializeField, Min(0.01f)] private float bathroomLength = 2.00f;
+    [SerializeField, Min(0.01f)] private float bathroomDoorWidth = 0.60f;
+    [SerializeField, Min(0.01f)] private float bathroomDoorOffset = 0.40f;
+    [SerializeField, Min(0.01f)] private float bathroomWallHeight = 2.00f;
+
     [Header("Existing wall sections (no generated replacement objects)")]
     [SerializeField] private Transform entranceLeft;
     [SerializeField] private Transform entranceRight;
@@ -86,6 +94,62 @@ public sealed class ApartmentWalls : MonoBehaviour
             roomLength, roomHeight, wallThickness);
         Set(rightSide, entranceX + roomLength / 2f, roomHeight / 2f, (roomWidth + wallThickness) / 2f,
             roomLength, roomHeight, wallThickness);
+
+        RebuildBathroom();
+    }
+
+    private void RebuildBathroom()
+    {
+        const string bathroomRootName = "Bathroom";
+        Transform previous = transform.Find(bathroomRootName);
+        if (previous != null)
+        {
+            if (Application.isPlaying) Destroy(previous.gameObject);
+            else DestroyImmediate(previous.gameObject);
+        }
+
+        if (!addBathroom) return;
+
+        // Entering through the -X wall, the apartment's left side is +Z.
+        // The existing +Z exterior wall is reused as the bathroom's outer wall.
+        float exteriorInnerZ = roomWidth * 0.5f;
+        float bathroomInnerMinZ = exteriorInnerZ - bathroomWidth;
+        float partitionZ = bathroomInnerMinZ - wallThickness * 0.5f;
+        float entranceInnerX = entranceX;
+        float rearWallX = entranceInnerX + bathroomLength + wallThickness * 0.5f;
+        float wallY = bathroomWallHeight * 0.5f;
+        float doorOffset = Mathf.Clamp(bathroomDoorOffset, 0f, bathroomLength - bathroomDoorWidth);
+        float afterDoor = bathroomLength - doorOffset - bathroomDoorWidth;
+
+        Transform bathroom = new GameObject(bathroomRootName).transform;
+        bathroom.SetParent(transform, false);
+
+        Material wallMaterial = entranceLeft != null && entranceLeft.TryGetComponent(out MeshRenderer renderer)
+            ? renderer.sharedMaterial
+            : null;
+
+        // Partition along the 2 m bathroom length, split into segments around the 0.60 m door opening.
+        AddBathroomWall(bathroom, "BathroomWall_DoorLeft", new Vector3(entranceInnerX + doorOffset * 0.5f, wallY, partitionZ), new Vector3(doorOffset, bathroomWallHeight, wallThickness), wallMaterial);
+        AddBathroomWall(bathroom, "BathroomWall_DoorRight", new Vector3(entranceInnerX + doorOffset + bathroomDoorWidth + afterDoor * 0.5f, wallY, partitionZ), new Vector3(afterDoor, bathroomWallHeight, wallThickness), wallMaterial);
+
+        // Closing wall at the end of the 2 m length; it meets the existing exterior wall at +Z.
+        AddBathroomWall(bathroom, "BathroomWall_Back", new Vector3(rearWallX, wallY, (bathroomInnerMinZ + exteriorInnerZ) * 0.5f), new Vector3(wallThickness, bathroomWallHeight, bathroomWidth + wallThickness), wallMaterial);
+    }
+
+    private static void AddBathroomWall(Transform parent, string wallName, Vector3 position, Vector3 scale, Material material)
+    {
+        if (scale.x <= 0f || scale.y <= 0f || scale.z <= 0f) return;
+
+        GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        wall.name = wallName;
+        wall.transform.SetParent(parent, false);
+        wall.transform.localPosition = position;
+        wall.transform.localScale = scale;
+
+        if (material != null && wall.TryGetComponent(out MeshRenderer renderer))
+        {
+            renderer.sharedMaterial = material;
+        }
     }
 
     private static void Set(Transform section, float x, float y, float z, float sx, float sy, float sz)
