@@ -18,6 +18,11 @@ public sealed class SteelFrameGenerator : MonoBehaviour
     [SerializeField] private float stairWidthMm = 700f;
     [SerializeField] private float stairLengthMm = 1500f;
 
+    [Header("Plywood deck, in millimeters")]
+    [SerializeField] private bool addPlywoodDeck = true;
+    [SerializeField] private float plywoodThicknessMm = 20f;
+    [SerializeField] private Color plywoodColor = new Color(0.55f, 0.32f, 0.15f, 1f);
+
     [Header("Layout")]
     [SerializeField] private int portalFrameCount = 4;
     [SerializeField] private bool addCenterLongitudinalBeam = true;
@@ -27,6 +32,7 @@ public sealed class SteelFrameGenerator : MonoBehaviour
     private const string GeneratedRootName = "_GeneratedSteelFrame";
     private Material steelMaterial;
     private Material joistMaterial;
+    private Material plywoodMaterial;
 
     private void OnEnable()
     {
@@ -40,6 +46,7 @@ public sealed class SteelFrameGenerator : MonoBehaviour
         lengthMm = Mathf.Max(1000f, lengthMm);
         widthMm = Mathf.Max(500f, widthMm);
         heightMm = Mathf.Max(500f, heightMm);
+        plywoodThicknessMm = Mathf.Max(1f, plywoodThicknessMm);
 #if UNITY_EDITOR
         // OnValidate may run during deserialization; rebuild on the editor thread.
         UnityEditor.EditorApplication.delayCall -= RebuildInEditor;
@@ -66,6 +73,7 @@ public sealed class SteelFrameGenerator : MonoBehaviour
 
         steelMaterial = CreateMaterial("Steel Frame Dark", steelColor);
         joistMaterial = CreateMaterial("Steel Frame Joists", joistColor);
+        plywoodMaterial = CreateMaterial("Plywood Deck", plywoodColor);
 
         float length = MmToMeters(lengthMm);
         float width = MmToMeters(widthMm);
@@ -94,7 +102,10 @@ public sealed class SteelFrameGenerator : MonoBehaviour
         foreach (float x in frameXs)
         {
             AddBox(root, $"Post L {x:0.00}", new Vector3(x, (height - beamSize) * 0.5f, minZ), new Vector3(postSize, height - beamSize, postSize), steelMaterial);
-            AddBox(root, $"Post R {x:0.00}", new Vector3(x, (height - beamSize) * 0.5f, maxZ), new Vector3(postSize, height - beamSize, postSize), steelMaterial);
+            // At the stair end, the right-hand support sits on the inner edge of the opening.
+            // This removes the outer posts that would otherwise stand inside the stair void.
+            float rightPostZ = x >= stairHeaderX - 0.001f ? stairInnerZ : maxZ;
+            AddBox(root, $"Post R {x:0.00}", new Vector3(x, (height - beamSize) * 0.5f, rightPostZ), new Vector3(postSize, height - beamSize, postSize), steelMaterial);
             float endZ = x > stairHeaderX + 0.001f && x < maxX - 0.001f ? stairInnerZ : maxZ;
             AddBox(root, $"Portal Beam {x:0.00}", new Vector3(x, topY, (minZ + endZ) * 0.5f), new Vector3(beamSize, beamSize, endZ - minZ - beamSize), steelMaterial);
         }
@@ -112,6 +123,11 @@ public sealed class SteelFrameGenerator : MonoBehaviour
             AddBox(root, "Main Deck Center Longitudinal Beam", new Vector3(0f, topY, (minZ + stairInnerZ) * 0.5f), new Vector3(length, beamSize, beamSize), steelMaterial);
         }
 
+        if (addPlywoodDeck)
+        {
+            AddPlywoodDeck(root, length, width, height, beamSize, stairHeaderX, stairInnerZ);
+        }
+
         foreach (float x in BuildJoistPositions(minX, maxX, MmToMeters(joistSpacingMm)))
         {
             if (frameXs.Exists(frameX => Mathf.Abs(x - frameX) < (beamSize + joistWidth) * 0.5f)) continue;
@@ -121,10 +137,30 @@ public sealed class SteelFrameGenerator : MonoBehaviour
             AddBox(root, $"Deck Joist {x:0.00}", new Vector3(x, height - joistHeight * 0.5f, (minZ + endZ) * 0.5f), new Vector3(joistWidth, joistHeight, endZ - minZ - beamSize), joistMaterial);
         }
 
-        AddFootPlates(root, frameXs, minZ, maxZ, postSize);
+        AddFootPlates(root, frameXs, minZ, maxZ, stairHeaderX, stairInnerZ, postSize);
     }
 
-    private void AddFootPlates(Transform root, IReadOnlyList<float> frameXs, float minZ, float maxZ, float postSize)
+    private void AddPlywoodDeck(Transform root, float length, float width, float steelTopY, float beamSize, float stairHeaderX, float stairInnerZ)
+    {
+        float thickness = MmToMeters(plywoodThicknessMm);
+        float openingMinX = stairHeaderX + beamSize * 0.5f;
+        float openingMinZ = stairInnerZ + beamSize * 0.5f;
+        float deckMinX = -length * 0.5f;
+        float deckMinZ = -width * 0.5f;
+        float deckMaxX = length * 0.5f;
+        float deckMaxZ = width * 0.5f;
+        float deckY = steelTopY + thickness * 0.5f;
+
+        // Two plywood panels cover the complete top while retaining the clear stair opening.
+        float mainPanelLength = openingMinX - deckMinX;
+        AddBox(root, "Plywood Deck Main", new Vector3(deckMinX + mainPanelLength * 0.5f, deckY, 0f), new Vector3(mainPanelLength, thickness, width), plywoodMaterial);
+
+        float sidePanelLength = deckMaxX - openingMinX;
+        float sidePanelWidth = openingMinZ - deckMinZ;
+        AddBox(root, "Plywood Deck Stair Side", new Vector3(openingMinX + sidePanelLength * 0.5f, deckY, deckMinZ + sidePanelWidth * 0.5f), new Vector3(sidePanelLength, thickness, sidePanelWidth), plywoodMaterial);
+    }
+
+    private void AddFootPlates(Transform root, IReadOnlyList<float> frameXs, float minZ, float maxZ, float stairHeaderX, float stairInnerZ, float postSize)
     {
         float plateSize = postSize * 2.3f;
         float plateHeight = 0.015f;
@@ -132,7 +168,8 @@ public sealed class SteelFrameGenerator : MonoBehaviour
         foreach (float x in frameXs)
         {
             AddBox(root, $"Foot Plate L {x:0.00}", new Vector3(x, plateHeight * 0.5f, minZ), new Vector3(plateSize, plateHeight, plateSize), steelMaterial);
-            AddBox(root, $"Foot Plate R {x:0.00}", new Vector3(x, plateHeight * 0.5f, maxZ), new Vector3(plateSize, plateHeight, plateSize), steelMaterial);
+            float rightPostZ = x >= stairHeaderX - 0.001f ? stairInnerZ : maxZ;
+            AddBox(root, $"Foot Plate R {x:0.00}", new Vector3(x, plateHeight * 0.5f, rightPostZ), new Vector3(plateSize, plateHeight, plateSize), steelMaterial);
         }
     }
 
