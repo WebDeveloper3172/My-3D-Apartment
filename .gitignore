@@ -13,10 +13,6 @@
 /[Aa]rtifacts/
 # Uncomment if this obsolete Asset Store integration is installed.
 # /[Aa]ssets/AssetStoreTools*
-/[Pp]rojectSettings/EditorBuildSettings.asset
-/[Pp]rojectSettings/EditorBuildSettings.asset.meta
-/[Pp]rojectSettings/EditorUserBuildSettings.asset
-/[Pp]rojectSettings/EditorUserBuildSettings.asset.meta
 
 # Visual Studio / Rider / VS Code / JetBrains
 .vs/
